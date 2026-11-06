@@ -1,7 +1,8 @@
 # js/core — 암호화 저장·동기화
 
 화면 코드(필사노트·선물·회원 등)는 이 폴더의 API만 쓴다. GitHub·암호화·IndexedDB는 여기 안에 숨어 있다.
-시험: `core-test.html` (가짜 GitHub, 인터넷 필요 없음). 운영자용 인수인계: [HANDOVER.md](HANDOVER.md)
+시험: `core-test.html`, `access-test.html` (가짜 GitHub, 인터넷 필요 없음). 운영자용 인수인계: [HANDOVER.md](HANDOVER.md)
+등급별 보기 권한(공개·학부모·선생님·임원·관리자): 아래 [등급별 보기 권한 (access.js)](#등급별-보기-권한-accessjs), 명세 [ACCESS-SPEC.md](ACCESS-SPEC.md)
 
 | 파일 | 내용 |
 |---|---|
@@ -9,8 +10,10 @@
 | `core.js` | `createCore(opts)` — 열기·연결·기록·파일·동기화 |
 | `merge.js` | 동시에 고친 기록 합치기 (순수 함수) |
 | `crypto.js` | AES-256-GCM, PBKDF2, 복구 코드 |
-| `github.js` | GitHub 백엔드 (`tree/get/put/check`, 지우는 함수 없음) |
-| `fake-backend.js` | 시험용 메모리 백엔드 |
+| `github.js` | GitHub 백엔드 (`tree/get/put/check` + access 용 `head/commit/createRepo`, 지우는 함수 없음), `publicReader` |
+| `fake-backend.js` | 시험용 메모리 백엔드 (`FakeRepo`, 여러 저장소 `FakeGitHub`) |
+| `access.js` | 등급별 보기 권한: 역할 설정 · 코드 로그인 · 봉투 암호화 · 사람 관리 · 공개 저장소에 올리기 |
+| `access-ui.js` | 한국어 화면 조각: 로그인 카드 · 안내문(복사·인쇄) · 사람 명단 · 막기 확인 |
 | `kv.js` | IndexedDB 키-값 (메모리 대체) |
 | `image.js` | 사진 줄이기 (긴 변 1600px, EXIF 제거) |
 | `qrcode.js` | qrcode-generator 1.4.4 (MIT) + `export default` 한 줄 |
@@ -116,3 +119,101 @@ core.files.softDelete(id) / restore(id) / list()
 ## 사이트(셸)에 필요한 것
 - CSP `connect-src https://api.github.com`, `img-src blob:` (지금 index.html 에 이미 있음)
 - 화면: 비밀번호 입력, QR 보여 주기/찍고 들어오기, 이름 정하기, 상태 표시(저장됨/올리는 중/오프라인/오류), 휴지통, 충돌 표시, 관리자 메뉴(setup·토큰 바꾸기·비밀번호 바꾸기·새 복구 코드·백업)
+
+
+---
+
+## 등급별 보기 권한 (access.js)
+
+서버 없이 "누가 무엇을 보나"를 나눈다. 첫 화면은 공개 페이지이고, **로그인은 하나(아이디 + 접속 코드)** — 역할은 고르지 않고 그 사람의 자리(slot)가 정한다.
+
+### 역할 (사이트 설정)
+```js
+import { createAccess } from './core/access.js';
+const access = createAccess({
+  site: 'jayangchild', title: '자양교회 유년부',
+  owner: 'jayangchild', repo: 'jayangchild.github.io', branch: 'main', siteUrl: 'https://jayangchild.github.io/',
+  roles: [
+    { id: 'public' },                                   // 꼭 있어야 함. 평문
+    { id: 'parent', inherits: ['public'] },             // 이름은 기본표(학부모·선생님·임원·관리자…) 또는 name: '…'
+    { id: 'teacher', inherits: ['parent'] },
+    { id: 'officer', inherits: ['teacher'], write: true, labels: ['부장', '부감', '총무', '회계', '서기'] },
+    { id: 'admin', inherits: ['officer'], write: true }, // 관리자 역할은 하나 (id 'admin' 또는 admin: true)
+  ],
+  files: { repos: true, prefix: 'jayangchild-files', limit: 900e6 }, // repos:false 면 사이트 저장소 access/f/ 에
+});
+```
+- 물려받기는 여러 갈래도 된다(`inherits: ['a','b']`). `write: true` 역할의 꾸러미에만 쓰기 토큰이 들어간다.
+- `access.roles`: `closure(id)` 볼 수 있는 등급 · `tiersOf(id)` 열쇠 있는 등급 · `canWrite` · `isAdmin` · `name` · `display(id, labels)` → `'임원 (총무)'`.
+
+### 로그인 · 보기 (모든 사람)
+- `login(identifier, secret, { remember })` → `{ role, roleName, labels, name, tiers, canWrite, isAdmin, bundle }`. 틀리면 `AccessError('bad-login')`
+- `resume()` (이 기기 기억 30일) · `logout()` · `me()` · `tiers()` · `canSee(tier)` · `onChange(fn)`
+- `list(tier, { deleted })` → `[{ id, tier, data, file: { name, type, size, repo, path, stored } | null, at, deletedAt }]` · `listAll()` · `file(id, tier)` → Blob · `fileUrl(id, tier)`
+- 공개(`public`)는 로그인 없이 `list('public')`.
+- 열쇠가 바뀌었으면(누가 막힘) 꾸러미를 저절로 새로 받는다. 막힌 사람은 `AccessError('revoked')` 로 로그아웃된다.
+- `changeSecret(지금 코드, 새 비밀문장)` — 10자 이상. 숫자만(생일·전화번호·PIN)·흔한 말·같은 글자 반복은 `weak-passphrase`.
+  쓰기 역할은 바로 바뀌고 `{ done: true }`. 읽기 역할은 올릴 수 없어서 `{ request: 'ACX1.…' }` 를 관리자에게 보낸다(비밀문장은 들어 있지 않음).
+
+### 올리기 (쓰기 역할: 임원·관리자)
+- `publish({ id?, tier, data })` — 글(JSON). 고칠 때마다 새 항목 열쇠
+- `publishFile(blob, { tier, name?, type?, data?, resize? })` → `{ id, repo, path, size }` — 파일 저장소 `<site>-files-N` 에 암호화해 올린다. 한도(900MB)를 넘게 되면 쓰기 토큰으로 다음 저장소를 만든다. 95MB 넘는 파일은 거부(동영상은 링크로)
+- `unpublish(id, tier)` / `restore(id, tier)` — 휴지통 (암호문·파일은 지우지 않음)
+- 공개 저장소에는 **커밋 하나**로 올린다 (git trees API). 누가 먼저 올렸으면 다시 읽어 합친 뒤 다시.
+
+### 관리자
+```js
+// 처음 한 번: core 를 연 관리자 PC 에서 (core.setup 다음)
+const { code, recoveryCode, admin } = await access.setup(core, { token: 공개저장소쓰기토큰, name: '이관리', identifier: 'yunyeon-admin' });
+// 그다음부터: 다른 사람과 같은 로그인 → 데이터 저장소(core)까지 열림 (사이트 비밀번호 필요 없음)
+await access.login('yunyeon-admin', code);
+const admin = await access.openAdmin(core);
+```
+- `admin.people()` → `[{ id, name, identifier, role, roleName, roleLabel, labels, status: 'active'|'revoked', issuedAt, revokedAt, secret: 'code'|'passphrase', canWrite }]`
+- `admin.addPerson({ name, identifier, role, labels?, code? })` → `{ person, code, invitation }` — 코드는 이때 한 번만 보인다(어디에도 저장 안 함).
+  `code` 를 넣으면(가져온 인증번호) 그것을 쓰고, 40비트보다 약하면 `weak-code` (`acceptWeak: true` 로 알고 쓰기)
+- `admin.resetCode(id)` — 새 코드(예전 코드 바로 무효, 개인 열쇠도 새로). 막은 사람이면 다시 허용 (`reinstate(id)` 와 같음)
+- `admin.changeRole(id, role, labels)` — 낮추면 잃는 등급의 열쇠를 바꾼다 → `{ rotated, tokenExposed, recoveryCode }`
+- `admin.revoke(id, { newToken? })` — 자리를 지우고, 그 사람이 가졌던 등급 열쇠를 모두 바꾸고, 항목 열쇠·남은 사람 꾸러미를 다시 감싸 **커밋 하나**로 올린다.
+  파일 암호문은 그대로. 쓰기 역할이었으면 `tokenExposed: true` → `admin.setToken(새토큰)` 후 예전 토큰을 GitHub에서 지운다. 관리자를 막으면 새 명단 복구 코드를 준다.
+- `admin.applySecretChange(request)` · `admin.setToken(token)` · `admin.newRecoveryCode()` · `admin.republish()` (올리다 끊겼을 때 다시 맞추기)
+- 관리자 코드를 잃었을 때: core 를 사이트 비밀번호로 연 뒤 `access.recoverAdmin(core, 명단복구코드)` → `admin.resetCode(내 id)`
+
+### 화면 조각 (access-ui.js)
+```js
+import { loginCard, invitationCard, printCard, peopleTable, confirmRevoke, revokeMessage } from './core/access-ui.js';
+el.append(loginCard({ access, onLogin: r => route(r.role) }));       // 아이디 + 코드, 역할 고르기 없음
+el.append(peopleTable({ admin, access }));                           // 추가 · 새 코드 · 역할 · 막기(확인 창) · 다시 허용
+el.append(invitationCard({ title, siteUrl, name, identifier, code, roleLabel }));  // 안내문 + 복사 + 카드 인쇄
+```
+막기 확인 창은 "앞으로 올리는 새 내용은 못 보지만, 이미 내려받은 예전 내용은 그 기기에 남을 수 있다"고 그대로 말한다. "마지막 접속"은 보여 주지 않는다(서버가 없어 알 수 없음).
+
+### 저장 구조
+- 공개 사이트 저장소: `keyring.json` (자리: `SHA-256(사이트 소금 + 아이디)` → `{ s, i, t, at, w, b }`, 이름·아이디·역할 없음),
+  `access/<등급>/index.json` (항목마다 `{ kv, k: K_등급으로 감싼 항목 열쇠, r: 글 암호문, m: 파일 정보 암호문, f: { repo, path, size }, at, del? }`),
+  `access/public/index.json` (평문), `access/files.json` (파일 저장소와 쓴 크기)
+- 파일 저장소 `<site>-files-N` (공개): `f/<id>.bin` 암호문
+- 비공개 데이터 저장소(core): `accessSys/state` · `accessPeople/<id>` — 관리자 열쇠 M 으로 한 번 더 잠김. 사이트 비밀번호를 아는 사람도 명단·열쇠는 못 본다
+- 열쇠: 코드 → PBKDF2 60만 회 → 개인 열쇠 P → 꾸러미 `{ keys: { 등급: { kv, k } }, token?(쓰기만), am·vault?(관리자만) }`
+
+### 알아 둘 것 (한계)
+- 공개 저장소에 있는 것은 누구나 내려받아 집에서 맞혀 볼 수 있다. 그래서 코드는 60비트 무작위, 비밀문장은 10자 이상이다. 생일·PIN 만으로는 안 된다(그건 인증 서버가 있어야 함).
+- 자리 이름은 아이디의 해시라서, 아이디가 전화번호처럼 맞히기 쉬우면 "그 번호가 명단에 있는지"는 알 수 있다(내용은 못 봄).
+- 막힌 사람이 이미 받은 것은 되돌릴 수 없다. 막은 뒤 올린 것과 고친 것(새 항목 열쇠)만 막힌다.
+- 공개 사이트(Pages)는 1~2분 늦게 바뀐다. 새로 추가한 사람이 바로 로그인이 안 되면 잠시 뒤 다시.
+- 관리자 꾸러미에는 core 데이터 키와 토큰이 들어 있다(같은 로그인으로 열기). 관리자 코드는 사이트 비밀번호만큼 중요하다.
+- 사이트 CSP `connect-src` 에 `https://raw.githubusercontent.com` (파일 저장소 읽기) 가 필요하다.
+- 쓰기 토큰(fine-grained): 공개 사이트 저장소 + 파일 저장소에 Contents 쓰기, 새 파일 저장소를 만들려면 Administration 쓰기. "All repositories" 로 하면 비공개 데이터 저장소도 닿지만 그 안은 사이트 비밀번호(DEK)로 암호화되어 있다. 아니면 `-files-1~3` 을 미리 만들어 토큰에 넣어 둔다.
+
+### 인증 서버로 바꾸기 (authProvider)
+`createAccess(config, { provider })` — `{ login(identifier, secret) → bundle, refresh?(bundle) → bundle | null }`.
+기본은 `localSlotProvider({ fetchKeyring })` (keyring.json 을 이 기기에서 연다). 나중에 Cloudflare Worker(생일 + 횟수 제한, 이메일 OTP, 고객 DB 확인)가 같은 모양의 꾸러미를 돌려주면 화면은 그대로다.
+
+### 다른 사이트에 옮기기 (jayangchoir · forcsoz)
+1. `js/core/` 를 통째로 복사한다 (`crypto · kv · github · image · core · access · access-ui`, 시험용 `fake-backend` 와 `core-test.html` · `access-test.html`).
+2. `core.js` 의 `DEFAULT_REPO` 와 IndexedDB 이름(`index.js`)을 그 사이트 것으로 바꾼다.
+3. `createAccess({ site, title, owner, repo, siteUrl, roles, files })` 에 그 사이트의 역할표를 넣는다.
+   - jayangchoir: `public → parent(가족마다 코드, 그만두면 막기) → admin`
+   - forcsoz: `public → customer(인증번호: addPerson({ code }) 로 가져오기, 40비트 미만은 경고) → staff(@forcs.com 주소마다 코드) → writer(write) → admin`
+4. CSP 에 `https://raw.githubusercontent.com` 를 더하고, 첫 화면은 공개 페이지 + `loginCard` 하나.
+5. `access-test.html` 의 `ROLES`·`CFG` 를 그 사이트 것으로 바꿔 헤드리스 Edge 로 돌린다 (`node tools/serve.mjs` → `/access-test.html?report`).

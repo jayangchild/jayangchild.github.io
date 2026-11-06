@@ -436,6 +436,45 @@ export function createCore(opts = {}) {
     setState(st.state);
   }
 
+  // ---------- 관리자 로그인으로 열기 (access.js) ----------
+  // 관리자의 접속 꾸러미(access.js bundle.vault)에는 이 데이터 키와 토큰이 들어 있다. 그래서 관리자는
+  // 사이트 로그인(아이디 + 코드) 한 번으로 이 저장소도 연다. 데이터 키는 비밀번호를 바꿔도 그대로다.
+
+  // 열려 있을 때만: 지금 데이터 키·토큰·저장소
+  function vaultKey() {
+    assertOpen();
+    const d = st.device;
+    return { dek: C.b64(st.dek.raw), token: st.token, owner: d.owner, repo: d.repo, branch: d.branch || 'main' };
+  }
+
+  // vaultKey() 로 받은 값으로 연다. 연결되지 않은 기기면 토큰으로 저장소의 vault.json 을 받아 연결한다
+  async function openWithKey({ dek, token, owner, repo, branch } = {}) {
+    await ready;
+    if (st.dek) return status();
+    if (!dek) throw new CoreError('bad-key', '데이터 열쇠가 없어요.');
+    const raw = C.unb64(dek);
+    const key = { raw, key: await C.importDEK(raw) };
+    const tokOf = async v => {
+      try { return await C.decryptText(key.key, v.tok, 'tok'); } catch { throw new CoreError('bad-key', '데이터 열쇠가 이 저장소와 맞지 않아요.'); }
+    };
+    const dev = { ...DEFAULT_REPO, ...(owner ? { owner } : {}), ...(repo ? { repo } : {}), ...(branch ? { branch } : {}) };
+    const here = st.device && st.vault?.tok && st.device.owner === dev.owner && st.device.repo === dev.repo;
+    if (here) {
+      await enter(key, await tokOf(st.vault));
+      return status();
+    }
+    const be = backendFor(token, dev);
+    dev.branch = (await be.check()).branch || dev.branch;
+    const got = await be.get(VAULT);
+    if (!got) throw new CoreError('not-setup', '아직 설정되지 않은 저장소예요.');
+    const vault = JSON.parse(C.unutf8(got.bytes));
+    const tok = await tokOf(vault);
+    await switchRepo(dev);
+    await saveDevice(dev, vault, got.sha);
+    await enter(key, tok);
+    return status();
+  }
+
   // ---------- 비밀번호 / 복구 코드 / 토큰 ----------
 
   // vault.json 고치기: 최신본을 받아 fn 으로 고치고, 그사이 누가 고쳤으면 다시
@@ -978,6 +1017,8 @@ export function createCore(opts = {}) {
     newRecoveryCode,
     recover,
     rotateToken,
+    vaultKey,
+    openWithKey,
     // 데이터
     collection,
     files,

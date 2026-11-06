@@ -7,6 +7,14 @@
 //   check()                        → { branch } 토큰으로 저장소를 볼 수 있는지 확인 (비공개가 아니면 거부)
 // 오류는 BackendError: status 0 = 인터넷 없음, 401 = 토큰이 틀림/만료, 403·404 = 권한 없음, 409 = 다른 기기가 먼저 고침.
 // 파일을 지우는 함수는 일부러 없다 (데이터는 지우지 않는다).
+//
+// access.js(공개 사이트 저장소에 올리기)는 여기에 더해 아래를 쓴다:
+//   head()                         → 기본 브랜치 끝 커밋 sha (빈 저장소면 null)
+//   get(path, ref)                 → ref(커밋 sha)에서 읽기
+//   commit(files, message, parent) → 여러 파일 [{ path, bytes }] 을 커밋 하나로 (git trees API).
+//                                    parent 가 브랜치 끝이 아니면(누가 먼저 올림) status 409
+//   createRepo(name)               → { name, created } 공개 저장소 만들기 (이미 있으면 created:false)
+// publicReader(...) 는 토큰 없이 공개 사이트(GitHub Pages)와 공개 파일 저장소(raw.githubusercontent.com)를 읽는다.
 
 import { b64, unb64 } from './crypto.js';
 
@@ -84,10 +92,10 @@ export class GitHubBackend {
     }
   }
 
-  async get(path) {
+  async get(path, ref) {
     let j;
     try {
-      j = await this.req('GET', `${this.base()}/contents/${encodeURI(path)}?ref=${encodeURIComponent(this.branch)}`);
+      j = await this.req('GET', `${this.base()}/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref || this.branch)}`);
     } catch (e) {
       if (e.status === 404) return null;
       throw e;
@@ -106,4 +114,72 @@ export class GitHubBackend {
     const j = await this.req('PUT', `${this.base()}/contents/${encodeURI(path)}`, body);
     return j.content.sha;
   }
+
+  async head() {
+    try {
+      const r = await this.req('GET', `${this.base()}/git/ref/heads/${encodeURIComponent(this.branch)}`);
+      return r.object.sha;
+    } catch (e) {
+      if (e.status === 404 || e.status === 409) return null; // 빈 저장소
+      throw e;
+    }
+  }
+
+  async commit(files, message, parent) {
+    if (!parent) throw new BackendError(400, '빈 저장소에는 commit 할 수 없어요 (README 하나를 먼저 만드세요).');
+    const pc = await this.req('GET', `${this.base()}/git/commits/${parent}`);
+    const tree = [];
+    for (const f of files) {
+      const b = await this.req('POST', `${this.base()}/git/blobs`, { content: b64(f.bytes), encoding: 'base64' });
+      tree.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
+    }
+    const t = await this.req('POST', `${this.base()}/git/trees`, { base_tree: pc.tree.sha, tree });
+    const c = await this.req('POST', `${this.base()}/git/commits`, { message, tree: t.sha, parents: [parent] });
+    try {
+      await this.req('PATCH', `${this.base()}/git/refs/heads/${encodeURIComponent(this.branch)}`, { sha: c.sha, force: false });
+    } catch (e) {
+      if (e.status === 422) throw new BackendError(409, '다른 사람이 먼저 올렸어요.'); // fast-forward 아님
+      throw e;
+    }
+    return c.sha;
+  }
+
+  // 공개 저장소 만들기 (파일 저장소 <site>-files-N). org: 조직 계정이면 true
+  async createRepo(name, { org = false, description = '' } = {}) {
+    try {
+      await this.req('GET', `/repos/${this.owner}/${name}`);
+      return { name, created: false };
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+    const body = { name, private: false, auto_init: true, description, has_issues: false, has_wiki: false, has_projects: false };
+    try {
+      await this.req('POST', org ? `/orgs/${this.owner}/repos` : '/user/repos', body);
+    } catch (e) {
+      if (e.status === 422) return { name, created: false }; // 그사이 다른 사람이 만듦
+      if (e.status === 403 || e.status === 404) throw new BackendError(e.status, `저장소 ${name} 을(를) 만들 권한이 없어요. 쓰기 토큰에 저장소 만들기(Administration) 권한이 있는지 확인하세요.`);
+      throw e;
+    }
+    return { name, created: true };
+  }
+}
+
+// 토큰 없이 읽기: 사이트 파일은 GitHub Pages(siteUrl)에서, 파일 저장소는 raw.githubusercontent.com 에서.
+// 사이트 CSP connect-src 에 https://raw.githubusercontent.com 이 있어야 한다.
+export function publicReader({ siteUrl, owner, branch = 'main' }) {
+  const grab = async url => {
+    let r;
+    try {
+      r = await fetch(url, { cache: 'no-store' });
+    } catch {
+      throw new BackendError(0, '인터넷에 연결되어 있지 않아요.');
+    }
+    if (r.status === 404) return null;
+    if (!r.ok) throw new BackendError(r.status, `내려받지 못했어요 (${r.status}).`);
+    return new Uint8Array(await r.arrayBuffer());
+  };
+  return {
+    site: path => grab(`${new URL(path, siteUrl)}?t=${Date.now()}`),
+    file: (repo, path) => grab(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`),
+  };
 }
