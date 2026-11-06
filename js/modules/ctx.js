@@ -8,6 +8,7 @@
 import { core } from '../store.js';
 import { access, reaches, ROLE_NAME } from './site-access.js';
 import { MENU, menuMin, tierFor } from './menus.js';
+import { uid } from '../core/access.js';
 
 export const who = { role: 'public', name: '', labels: [], write: false, admin: false, vaultOnly: false };
 export const has = (role) => reaches(who.role, role);
@@ -110,6 +111,8 @@ export function col(name) {
       D.cols.get(name).set(r.id, saved);
       return structuredClone(saved);
     },
+    // 여러 개를 공개 저장소 커밋 하나로 (가져오기용)
+    putMany: (recs) => putMany(recs.map((rec) => ({ col: name, rec }))),
     async patch(id, fields) {
       const cur = m().get(String(id));
       if (!cur) throw new Error('기록을 찾을 수 없어요.');
@@ -126,6 +129,32 @@ export function col(name) {
     },
   };
   return api;
+}
+
+// 여러 목록의 기록을 한 번에: entries = [{ col, rec }] → 저장한 기록들 (같은 순서).
+// 새 기록·같은 등급에서 고친 기록은 access.publishMany 로 공개 저장소 커밋 하나. 다른 등급으로 옮겨야 하는 기록(파일도 옮김)은 하나씩 put.
+// rec.id 를 미리 정해 두면(newId) 같은 묶음 안에서 서로 가리킬 수 있다 (예: 선물 기록 → 선물 물품)
+export const newId = uid;
+export async function putMany(entries) {
+  need();
+  const out = new Array(entries.length);
+  const batch = [];
+  for (const [i, { col: name, rec }] of entries.entries()) {
+    const old = rec.id ? D.cols.get(name)?.get(String(rec.id)) : null;
+    const tier = tierFor(name, rec, menuCfg());
+    if (old && old._tier !== tier) { out[i] = await col(name).put(rec); continue; }
+    const id = old?.id || (rec.id ? String(rec.id) : uid());
+    const data = { ...strip(rec), col: name, createdAt: old?.createdAt || now(), createdBy: old?.createdBy || who.name, updatedAt: now(), updatedBy: who.name };
+    batch.push({ i, id, tier, data });
+  }
+  if (batch.length) await access.publishMany(batch.map(({ id, tier, data }) => ({ id, tier, data })), { message: `가져오기 ${batch.length}개` });
+  for (const { i, id, tier, data } of batch) {
+    const saved = { ...data, id, _tier: tier, _at: now() };
+    if (!D.cols.has(data.col)) D.cols.set(data.col, new Map());
+    D.cols.get(data.col).set(id, saved);
+    out[i] = structuredClone(saved);
+  }
+  return out;
 }
 
 export async function restoreItem(colName, id) {

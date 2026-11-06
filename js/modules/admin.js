@@ -1,7 +1,7 @@
 // 관리 (관리자만): 사람·접속 코드 · 공개 페이지 · 메뉴 보이기 · 데이터(백업·불러오기·가져오기·다시 맞추기)
 // 사람·코드·막기는 access 의 관리자 손잡이(openAdmin)와 access-ui 의 peopleTable 을 그대로 쓴다.
 import { core } from '../store.js';
-import { col, who, moduleTrash, menuCfg, fileBlob, upload } from './ctx.js';
+import { col, who, moduleTrash, menuCfg, fileBlob, upload, putMany, newId } from './ctx.js';
 import { $, esc, toast, formModal, guard, head, empty, today, uploadFile, hydrate, imgTag, askTrash, pickFile } from './kit.js';
 import { download } from '../ui.js';
 import { access, ROLE_NAME, ROLE_IDS, CONFIG } from './site-access.js';
@@ -221,26 +221,27 @@ export async function moduleRestore(json, onStep = () => {}) {
 // 씨앗(seed) 가져오기: 가방이름표 CSV·전도용품 엑셀에서 만든 JSON. 이름·물품 이름이 같으면 더하지 않는다
 export async function importSeed(json, onStep = () => {}) {
   if (json?.kind !== 'jayangchild-seed') throw new Error('가져오기 파일(jayangchild-seed)이 아니에요.');
+  // 모두 모아서 공개 저장소 커밋 하나로 (access.publishMany). 예전에는 한 줄마다 커밋 하나였다
+  const all = [];
   const M = col('members');
   const have = new Set([...M.list(), ...M.trash()].map((m) => m.seedKey || `${m.type || 'student'}:${m.name}`));
-  let n = 0;
   let addM = 0;
   for (const m of json.members || []) {
     const key = m.seedKey || `${m.type}:${m.name}`;
     if (!m.name || have.has(key)) continue;
     have.add(key);
-    await M.put({ ...m, seedKey: key, type: m.type === 'teacher' ? 'teacher' : 'student' });
+    all.push({ col: 'members', rec: { ...m, seedKey: key, type: m.type === 'teacher' ? 'teacher' : 'student' } });
     addM++;
-    onStep(++n);
   }
   const G = col('gifts');
   const gByName = new Map(G.list().map((g) => [g.name, g]));
   let addG = 0;
   for (const g of json.giftItems || []) {
     if (gByName.has(g.name)) continue;
-    gByName.set(g.name, await G.put({ name: g.name, type: g.type || '전도선물', unit: g.unit || '개', low: g.low ?? null, note: g.note || '', seedKey: g.seedKey }));
+    const rec = { id: newId(), name: g.name, type: g.type || '전도선물', unit: g.unit || '개', low: g.low ?? null, note: g.note || '', seedKey: g.seedKey };
+    gByName.set(g.name, rec);
+    all.push({ col: 'gifts', rec });
     addG++;
-    onStep(++n);
   }
   const L = col('giftLog');
   const seen = new Set(L.list().map((r) => r.seedKey).filter(Boolean));
@@ -249,10 +250,10 @@ export async function importSeed(json, onStep = () => {}) {
     if (seen.has(r.seedKey)) continue;
     const g = gByName.get(r.gift);
     if (!g) continue;
-    await L.put({ gift: g.id, qty: Number(r.qty) || 0, kind: r.qty < 0 ? 'out' : 'in', date: r.date, to: r.to || '', why: r.why || '', seedKey: r.seedKey });
+    all.push({ col: 'giftLog', rec: { gift: g.id, qty: Number(r.qty) || 0, kind: r.qty < 0 ? 'out' : 'in', date: r.date, to: r.to || '', why: r.why || '', seedKey: r.seedKey } });
     addL++;
-    onStep(++n);
   }
+  if (all.length) { onStep(`${all.length}개`); await putMany(all); }
   return { members: addM, giftItems: addG, giftLog: addL, skipped: (json.members || []).length - addM };
 }
 
