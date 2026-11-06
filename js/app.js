@@ -12,7 +12,7 @@ import { esc } from './pilsa/sheet.js';
 import { access, ROLE_NAME } from './modules/site-access.js';
 import { who, setWho, loadAll, clearData, canSee, coreOpen, menuCfg, roleText } from './modules/ctx.js';
 import { MENUS, MENU, menuMin } from './modules/menus.js';
-import { renderHome, renderLogin, renderMe } from './modules/home.js';
+import { renderHome, renderLogin, renderMe, checkSetup } from './modules/home.js';
 import { renderRoster, renderBirthdays } from './modules/roster.js';
 import { renderTalent } from './modules/talent.js';
 import { renderPlan } from './modules/plan.js';
@@ -21,6 +21,8 @@ import { renderMedia } from './modules/media.js';
 import { renderGifts } from './modules/gifts.js';
 import { renderAdmin, setAdminHandle } from './modules/admin.js';
 import { renderModuleTrash } from './modules/trash.js';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function route() {
   const h = location.hash.replace(/^#\/?/, '') || 'home';
@@ -121,7 +123,7 @@ async function draw() {
   }
   const key = MENU[top] ? top : 'home';
   if (!canSee(key)) return noAccess(view, key);
-  if (key === 'home') return renderHome(view, { onLogin: () => { location.hash = '#/login'; } });
+  if (key === 'home') return renderHome(view, { onLogin: () => { location.hash = '#/login'; }, onSetup: () => adminOpen() });
   if (key === 'photos') return renderMedia(view, q);
   if (key === 'roster') return renderRoster(view, q);
   if (key === 'birthdays') return renderBirthdays(view);
@@ -254,13 +256,20 @@ async function start() {
   $('#gate').hidden = true;
   $('#app').hidden = false;
   initChrome();
-  await core.ready;
-  if (core.hasJoinLink(location.hash)) return adminOpen(); // 관리자 기기 QR 연결
+  if (core.hasJoinLink(location.hash)) { await core.ready; return adminOpen(); } // 관리자 기기 QR 연결
+  // 공개 내용은 GitHub Pages 에서 바로 읽는다 — 이 기기 저장소(IndexedDB, core.ready·기억한 로그인)를 기다리지 않는다.
+  // 그래서 IndexedDB 가 느리거나 막힌 브라우저에서도 첫 화면이 뜬다. 공개 내용·keyring.json 이 아직 없으면(처음 설정 전) 404 →
+  // 기본 소개 + 관리자용 «처음 설정». 1.5초 안에 못 받으면 기본 소개부터 그리고, 다 받으면 아래에서 다시 그린다
+  let pubOk = false;
+  const pub = loadAll().then(() => { pubOk = true; }, (e) => console.warn(e)).then(checkSetup);
+  await Promise.race([pub, sleep(1500)]);
   await render();
+  await Promise.race([pub, sleep(10000)]);
+  await core.ready;
   try {
     const r = await access.resume();
     if (r) await enterAccess(r);
-    else await loadAll();
+    else if (!pubOk) await loadAll();
   } catch (e) {
     console.warn(e);
     if (e.code === 'revoked') toast(e.message, 6000);

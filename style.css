@@ -283,7 +283,14 @@ label.check.pick .val { display: block; white-space: pre-line; background: var(-
 .chip.user { text-decoration: none; color: var(--text-2); font-weight: 600; }
 .chip.user.on { background: var(--accent-soft); color: var(--accent-2); }
 .nav { overflow: hidden; min-width: 0; flex: 0 1 auto; }
-.top-actions { margin-left: auto; }
+.top-actions { margin-left: auto; flex: none; }
+/* 좁은 휴대폰: 오른쪽 버튼(로그인·내 정보)은 그대로, 줄어드는 것은 이름 글자 (잘리면 …) */
+.brand { min-width: 0; flex: 0 1 auto; }
+.brand img { flex: none; }
+.brand span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chip.user { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-hint { text-align: center; margin: 18px 0 0; }
+.setup-hint .btn { margin-left: 4px; }
 .nav-more { position: relative; flex: none; }
 .nav-more > summary { list-style: none; cursor: pointer; padding: 6px 12px; border-radius: 999px; font-weight: 600; color: var(--text-2); white-space: nowrap; font-size: 14px; }
 .nav-more > summary::-webkit-details-marker { display: none; }
