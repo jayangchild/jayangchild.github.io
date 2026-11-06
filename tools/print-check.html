@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- 개발용: 백업 파일(JSON)로 필사지를 그려 인쇄 결과를 확인한다. 브라우저 저장소(IndexedDB)를 쓰지 않아서
+     msedge --headless --print-to-pdf 로도 찍힌다. 사이트 화면에서는 쓰지 않는다.
+     예) tools/print-check.html?file=backup.json&month=11 -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>인쇄 확인</title>
+<link rel="stylesheet" href="../css/sheet.css">
+<style>
+  html, body { margin: 0; background: #888; }
+  @media print { html, body { background: #fff; } .page { margin: 0 !important; } }
+  .page { break-after: page; }
+  .page:last-child { break-after: auto; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import { pageHTML, fitAll, monthOf } from '../js/pilsa/sheet.js';
+const q = new URLSearchParams(location.search);
+const json = await (await fetch(q.get('file'), { cache: 'no-cache' })).json();
+const month = +(q.get('month') || 0);
+const files = Object.fromEntries((json.items.files || []).map((f) => [f.id, f]));
+const urls = {};
+for (const [id, url] of Object.entries(json.files || {})) urls[id] = url;
+const list = json.items.lessons.filter((v) => !month || monthOf(v) === month).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+const root = document.getElementById('root');
+// 페이지 상대 주소(assets/logo.png)가 사이트 루트 기준이 되도록
+document.head.insertAdjacentHTML('afterbegin', '<base href="../">');
+root.innerHTML = list.map((v) => pageHTML(v, { design: json.items.themes.find((t) => t.id === `m${monthOf(v)}`) || {}, files, urls })).join('');
+await fitAll(root);
+document.body.dataset.ready = '1';
+</script>
+</body>
+</html>
