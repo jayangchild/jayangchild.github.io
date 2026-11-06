@@ -3,7 +3,7 @@
 //   잔액 = 그 학생 기록 qty 합계. 두 선생님이 동시에 눌러도 기록이 따로 생겨서 서로 덮어쓰지 않는다.
 // 나중에: 필사노트 확인(필사 체크)에서 달란트를 주는 고리 — addTalent(member, qty, why) 를 부르면 된다.
 import { col, isWriter } from './ctx.js';
-import { $, esc, toast, formModal, hydrate, imgTag, guard, head, readOnlyNote, empty, today, won } from './kit.js';
+import { $, esc, toast, formModal, hydrate, imgTag, guard, head, readOnlyNote, empty, today, won, gone } from './kit.js';
 import { students, classOf } from './roster.js';
 
 export function balances() {
@@ -25,6 +25,7 @@ export function monthSummary(ym) {
 }
 
 export async function renderTalent(el, q) {
+  if (gone(el, 'talent')) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const writer = isWriter();
   const tab = q.get('t') || 'class';
   const bal = balances();

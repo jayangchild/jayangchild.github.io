@@ -2,7 +2,7 @@
 //   albums { title, date, vis: 'parent'|'teacher', photos: [파일 id], note }  — 사진은 이 기기에서 줄이고(긴 변 1600px) EXIF 를 뺀 뒤 암호화
 //   videos { title, url (YouTube), date, vis }  — 링크만 (사이트 안에 동영상을 넣지 않는다)
 import { col, isWriter, has } from './ctx.js';
-import { $, esc, toast, formModal, guard, head, readOnlyNote, empty, fmtDate, askTrash, uploadFile, hydrate, imgTag, today, ytId } from './kit.js';
+import { $, esc, toast, formModal, guard, head, readOnlyNote, empty, fmtDate, askTrash, uploadFile, hydrate, imgTag, today, ytId, gone } from './kit.js';
 import { openModal } from '../ui.js';
 import { ROLE_NAME } from './site-access.js';
 
@@ -24,6 +24,7 @@ async function addPhotos(files, rec) {
 }
 
 export async function renderMedia(el, q) {
+  if (gone(el, 'photos')) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const writer = isWriter();
   const albumId = q.get('a');
   if (albumId) return renderAlbum(el, q, albumId);
@@ -74,6 +75,7 @@ export async function renderMedia(el, q) {
 }
 
 async function renderAlbum(el, q, id) {
+  if (gone(el, 'photos')) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const writer = isWriter();
   const a = col('albums').get(id);
   if (!a) { el.innerHTML = `<div class="card">${empty('앨범을 찾을 수 없어요.')}<a class="btn" href="#/photos">← 사진·영상</a></div>`; return; }

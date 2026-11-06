@@ -154,7 +154,7 @@ async function shotBoth(page, name) {
   }
   await page.setViewportSize(vp);
 }
-const menusOf = (page) => page.$$eval('#nav a[data-menu]', (as) => as.map((a) => a.dataset.menu));
+const menusOf = (page) => page.$$eval('#nav a[data-menu], #nav-more a[data-menu]', (as) => as.map((a) => a.dataset.menu)); // 위 메뉴 + 더보기
 const ctxEval = (page, fn, arg) => page.evaluate(fn, arg);
 async function modalSubmit(page, fill) {
   await page.waitForSelector('#modal[open] form');
@@ -374,6 +374,42 @@ try {
   stock = await A.$eval('[data-stock]', (e) => e.textContent);
   ok('선물 재고: 65 − 60 = 5 → 부족 경고', stock === '5' && !!(await A.$('.low-warn')), stock);
   await shotBoth(A, '8-gift-stock');
+  // «⋯» 메뉴: 기록 보기가 열리는가 (휴대폰 폭에서도)
+  for (const size of [PHONE, PC]) {
+    await A.setViewportSize(size);
+    await A.click('tr[data-id] details.row-more > summary');
+    await A.waitForSelector('tr[data-id] details.row-more[open] [data-act=hist]');
+    if (size === PHONE) await shot(A, '8b-gift-more-phone.png', { fullPage: true });
+    await A.click('tr[data-id] [data-act=hist]');
+    await A.waitForSelector('#modal[open] h2');
+    ok(`선물 «⋯» → 기록 (${size.width}px)`, (await A.textContent('#modal[open] h2')).includes('기록'));
+    await A.click('#modal[open] [data-close]');
+  }
+  // PC 위 메뉴: 1280·1024 에서 잘리는 메뉴 없음, 넘치는 것은 «더보기»
+  for (const w of [1280, 1024]) {
+    await A.setViewportSize({ width: w, height: 860 });
+    await sleep(400);
+    const fit = await A.evaluate(() => {
+      const nav = document.querySelector('#nav');
+      const r = nav.getBoundingClientRect();
+      const brand = document.querySelector('.brand').getBoundingClientRect();
+      const items = [...nav.querySelectorAll('a')].map((a) => a.getBoundingClientRect());
+      const more = document.querySelector('#nav-more');
+      return { clipped: items.filter((b) => b.left < r.left - 0.5 || b.right > r.right + 0.5).length, overlapBrand: items.some((b) => b.left < brand.right), scroll: nav.scrollLeft,
+        inline: items.length, more: more.hidden ? 0 : more.querySelectorAll('a').length, total: 13 };
+    });
+    ok(`PC 메뉴 ${w}px: 잘림·로고 겹침 없음, 나머지는 더보기`, !fit.clipped && !fit.overlapBrand && fit.scroll === 0 && fit.inline + fit.more === fit.total && fit.inline >= 5, JSON.stringify(fit));
+    await A.click('#nav-more > summary');
+    await A.waitForSelector('#nav-more[open] .nav-more-menu a');
+    await shot(A, `9-admin-nav-${w}.png`);
+    const pick = await A.$eval('#nav-more .nav-more-menu a[data-menu=meetings]', (a) => a.lastElementChild.textContent);
+    await A.evaluate(() => { document.body.dataset.ready = ''; });
+    await A.click('#nav-more .nav-more-menu a[data-menu=meetings]');
+    await A.waitForFunction(() => location.hash === '#/meetings' && document.body.dataset.ready === '1');
+    ok(`더보기 → 임원회의 (${w}px), 더보기 자리에 고른 메뉴 이름`, (await A.textContent('#nav-more > summary')).includes(pick) && !(await A.$('#nav-more[open]')), `${pick} / ${await A.textContent('#nav-more > summary')} / open=${!!(await A.$('#nav-more[open]'))} / hidden=${await A.isHidden('#nav-more')} / ${await A.evaluate(() => [...document.querySelectorAll('#nav a, #nav-more a')].map((a) => (a.closest('#nav-more') ? 'M:' : 'N:') + a.dataset.menu + (a.classList.contains('on') ? '*' : '')).join(','))}`);
+    await nav(A, '#/gifts');
+  }
+  await A.setViewportSize(PC);
 
   // 공개 저장소·파일 저장소에 평문 개인정보가 없는가
   const plain = [...gh.repos.values()].filter((r) => r.isPublic).flatMap((r) => [...r.files.values()].map((f) => Buffer.from(f.bytes).toString('utf8'))).join('\n');
@@ -520,7 +556,7 @@ try {
   // ---------- 10. 휴지통 ----------
   await nav(A, '#/plan');
   await A.click('.ev-list li [data-act=del]');
-  await ready(A);
+  await until(A, async () => (await import('/js/modules/ctx.js')).col('plan').list().length === 2);
   await nav(A, '#/trash');
   ok('휴지통에 연간계획 기록', (await A.textContent('#mt')).includes('연간계획'));
   await A.click('#mt [data-act=restore]');

@@ -5,8 +5,13 @@
 //   giftLog   { gift, qty: +n(입고)|-n(지급), kind: 'in'|'out', date, to, why } — 더하기만
 //   재고 = 기준 수량 + (기준을 정한 뒤의 giftLog qty 합계). 동시에 나눠 줘도 기록이 따로 생겨 충돌하지 않는다 (js/schemas.js)
 import { col, isWriter, who } from './ctx.js';
-import { $, esc, toast, formModal, guard, head, empty, today, won, askTrash } from './kit.js';
+import { $, esc, toast, formModal, guard, head, empty, today, won, askTrash, gone } from './kit.js';
 import { openModal } from '../ui.js';
+
+// «⋯» 메뉴: 다른 곳을 누르면 닫기
+document.addEventListener('click', (e) => {
+  for (const d of document.querySelectorAll('details.row-more[open]')) if (!d.contains(e.target)) d.removeAttribute('open');
+});
 
 export const BUILTIN_TYPES = ['전도선물', '생일선물', '성경암송대회 선물'];
 export const giftTypes = () => [...BUILTIN_TYPES, ...col('giftTypes').list().map((t) => t.name).filter((n) => !BUILTIN_TYPES.includes(n))];
@@ -29,6 +34,7 @@ const itemFields = () => [
 ];
 
 export async function renderGifts(el, q) {
+  if (gone(el, 'gifts')) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const writer = isWriter();
   const tab = q.get('t') || 'stock';
   const types = giftTypes();
@@ -44,6 +50,7 @@ export async function renderGifts(el, q) {
   el.onclick = async (e) => {
     const b = e.target.closest('[data-act]');
     if (!b || !writer) return;
+    b.closest('details.row-more')?.removeAttribute('open');
     const id = b.closest('[data-id]')?.dataset.id;
     const g = id ? col('gifts').get(id) : null;
     await guard(b, async () => {
@@ -88,12 +95,15 @@ export async function renderGifts(el, q) {
 
 function stockTable(items, writer) {
   if (!items.length) return `<div class="card">${empty('물품이 없어요. «+ 물품»으로 넣거나 관리 → 데이터 → 가져오기를 쓰세요.')}</div>`;
-  return `<div class="card"><div class="table-wrap"><table class="grid gift-stock"><thead><tr><th>물품</th><th>종류</th><th>재고</th><th>부족 알림</th>${writer ? '<th></th>' : ''}</tr></thead><tbody>
+  return `<div class="card"><div class="table-wrap gift-wrap"><table class="grid gift-stock"><thead><tr><th>물품</th><th>종류</th><th>재고</th><th>부족 알림</th>${writer ? '<th></th>' : ''}</tr></thead><tbody>
     ${items.map((g) => {
       const n = stockOf(g.id);
       return `<tr data-id="${esc(g.id)}" class="${isLow(g, n) ? 'low' : ''}"><td><b>${esc(g.name)}</b>${g.note ? `<div class="small muted">${esc(g.note)}</div>` : ''}</td><td>${esc(g.type || '')}</td>
         <td class="stock"><b data-stock>${n}</b> ${esc(g.unit || '개')} ${isLow(g, n) ? '<span class="pill warnpill">⚠ 부족</span>' : ''}</td><td><span class="cell-label">부족 알림</span>${g.low != null && g.low !== '' ? `${esc(g.low)} 이하` : '—'}</td>
-        ${writer ? `<td class="act"><button class="btn small primary" data-act="out" type="button">지급</button> <button class="btn small" data-act="in" type="button">입고</button> <button class="btn small ghost" data-act="hist" type="button">기록</button> <button class="btn small ghost" data-act="count" type="button">다시 세기</button> <button class="btn small ghost" data-act="edit" type="button">고치기</button> <button class="btn small ghost" data-act="del" type="button" aria-label="휴지통">🗑</button></td>` : ''}</tr>`;
+        ${writer ? `<td class="act"><div class="act-main"><button class="btn small primary" data-act="out" type="button">지급</button><button class="btn small" data-act="in" type="button">입고</button>
+          <details class="row-more"><summary class="btn small ghost" aria-label="더 보기">⋯</summary><div class="row-more-menu">
+            <button class="btn small ghost" data-act="hist" type="button">📋 기록</button><button class="btn small ghost" data-act="count" type="button">🔢 다시 세기</button>
+            <button class="btn small ghost" data-act="edit" type="button">✏️ 고치기</button><button class="btn small ghost" data-act="del" type="button">🗑 휴지통</button></div></details></div></td>` : ''}</tr>`;
     }).join('')}</tbody></table></div></div>`;
 }
 

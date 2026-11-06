@@ -1,6 +1,6 @@
 // 연간계획: plan { date, end?, title, place?, note }  — 한 해를 달마다 목록으로
 import { col, isWriter } from './ctx.js';
-import { $, esc, toast, formModal, guard, head, readOnlyNote, empty, fmtDate, askTrash } from './kit.js';
+import { $, esc, toast, formModal, guard, head, readOnlyNote, empty, fmtDate, askTrash, gone } from './kit.js';
 
 const fields = [
   { name: 'title', label: '행사', required: true },
@@ -11,6 +11,7 @@ const fields = [
 ];
 
 export async function renderPlan(el, q) {
+  if (gone(el, 'plan')) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const writer = isWriter();
   const all = col('plan').list();
   const years = [...new Set([new Date().getFullYear(), ...all.map((e) => +String(e.date).slice(0, 4)).filter(Boolean)])].sort();

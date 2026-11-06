@@ -87,6 +87,9 @@ export function guard(btn, fn) {
   };
 }
 
+// 늦게 끝난 저장 뒤 다시 그리기가 이미 바뀐 화면을 덮지 않게
+export const gone = (el, screen) => !!el.dataset.screen && el.dataset.screen !== screen;
+
 export const head = (title, desc = '', actions = '') => `<div class="card mod-head"><div class="row"><div class="grow"><h2>${title}</h2>${desc ? `<p class="muted small">${desc}</p>` : ''}</div>${actions}</div></div>`;
 export const readOnlyNote = () => '<p class="small muted">보기만 할 수 있어요. 고칠 것은 임원·관리자에게 말해 주세요.</p>';
 export const empty = (msg) => `<p class="muted empty">${msg}</p>`;

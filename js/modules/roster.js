@@ -2,7 +2,7 @@
 // members: { type: 'student'|'teacher', name, photo, gender, grade, cls, teacher(담임), parentName, parentPhone, phone, birthday, labels, note }
 // 부모님 연락처는 선생님 이상만 (학부모 칸에는 명단 자체가 올라가지 않는다 — menus.js 의 floor)
 import { col, has, isWriter } from './ctx.js';
-import { $, esc, toast, formModal, uploadFile, hydrate, imgTag, guard, head, readOnlyNote, empty, telHref, askTrash } from './kit.js';
+import { $, esc, toast, formModal, uploadFile, hydrate, imgTag, guard, head, readOnlyNote, empty, telHref, askTrash, gone } from './kit.js';
 import { LABELS } from './site-access.js';
 
 const pref = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
@@ -69,6 +69,7 @@ function card(m, contacts, writer) {
 const fmtB = (s) => { const b = bday(s); return b ? `${b.m}월 ${b.d}일` : s; };
 
 export async function renderRoster(el, q) {
+  if (gone(el, 'roster')) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const writer = isWriter();
   const contacts = has('teacher');
   const tab = q.get('t') === 'teacher' ? 'teacher' : 'student';

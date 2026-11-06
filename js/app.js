@@ -32,14 +32,13 @@ const hrefOf = (m) => (m.key === 'pilsa' ? '#/pilsa/make' : m.key === 'admin' ? 
 function renderNav(active) {
   const menus = MENUS.filter((m) => canSee(m.key));
   const html = menus.map((m) => `<a href="${hrefOf(m)}" class="${m.key === active ? 'on' : ''}" data-menu="${m.key}"><span class="ic" aria-hidden="true">${m.icon}</span><span>${m.name}</span></a>`).join('');
+  $('#nav-more .nav-more-menu').innerHTML = ''; // 지난번에 더보기로 옮긴 것 비우기
   $('#nav').innerHTML = html;
   $('#tabbar').innerHTML = html;
   $('#tabbar').hidden = menus.length < 2; // 메뉴가 하나뿐이면(방문자) 아래 막대는 빼기
-  for (const sel of ['#nav', '#tabbar']) { // 고른 메뉴가 보이게 (메뉴가 많을 때)
-    const bar = $(sel);
-    const on = bar.querySelector('a.on');
-    if (on && bar.clientWidth) bar.scrollLeft += on.getBoundingClientRect().left - bar.getBoundingClientRect().left - bar.clientWidth / 2 + on.clientWidth / 2;
-  }
+  const tb = $('#tabbar'); // 휴대폰 아래 막대: 고른 메뉴가 보이게
+  const on = tb.querySelector('a.on');
+  if (on && tb.clientWidth) tb.scrollLeft += on.getBoundingClientRect().left - tb.getBoundingClientRect().left - tb.clientWidth / 2 + on.clientWidth / 2;
   const c = coreOpen();
   for (const id of ['#sync-chip', '#settings-btn', '#lock-btn']) $(id).hidden = !c;
   if (!c) $('#conflict-badge').hidden = true;
@@ -49,7 +48,29 @@ function renderNav(active) {
   chip.innerHTML = `<span class="ph-hide">${esc(who.name)} · </span>${esc(ROLE_NAME[who.role] || '')}`;
   chip.classList.toggle('on', active === 'me');
   $('#settings-btn').classList.toggle('on', ['settings', 'conflicts'].includes(active));
+  fitNav();
 }
+
+// PC 위 메뉴: 한 줄에 다 들어가지 않으면 뒤에서부터(필사노트·선물·정책·임원회의·회계·관리) «더보기» 안으로. 잘리는 메뉴가 없다
+function fitNav() {
+  const nav = $('#nav');
+  const more = $('#nav-more');
+  const box = more.querySelector('.nav-more-menu');
+  for (const a of [...box.children]) nav.append(a);
+  more.hidden = true;
+  more.open = false;
+  if (!nav.clientWidth || nav.scrollWidth <= nav.clientWidth + 1) return;
+  more.hidden = false;
+  while (nav.children.length > 1 && nav.scrollWidth > nav.clientWidth + 1) box.prepend(nav.lastElementChild);
+  const on = box.querySelector('a.on');
+  const sum = more.querySelector('summary');
+  sum.textContent = on ? on.lastElementChild.textContent : '더보기';
+  sum.classList.toggle('on', !!on);
+}
+let fitTimer = 0;
+addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitNav, 120); });
+$('#nav-more').addEventListener('click', (e) => { if (e.target.closest('a')) $('#nav-more').open = false; });
+document.addEventListener('click', (e) => { if (!e.target.closest('#nav-more')) $('#nav-more').open = false; });
 
 function noAccess(view, key) {
   const m = MENU[key];

@@ -2,7 +2,7 @@
 //   기록 { date, title, kind?, body?, files: [{ id, name, type, size }] }
 // 파일은 기록과 같은 등급으로 암호화해 파일 저장소에 올린다 (PDF·엑셀은 줄이지 않음, 95MB까지).
 import { col, isWriter } from './ctx.js';
-import { $, esc, toast, formModal, guard, head, readOnlyNote, empty, fmtDate, askTrash, uploadFile, today } from './kit.js';
+import { $, esc, toast, formModal, guard, head, readOnlyNote, empty, fmtDate, askTrash, uploadFile, today, gone } from './kit.js';
 import { fileChips, handleFileClick, isPDF, viewFile } from './files-view.js';
 import { nextSunday } from '../ui.js';
 
@@ -38,6 +38,7 @@ export const DOCS = {
 };
 
 export async function renderDocs(el, key) {
+  if (gone(el, key)) return; // 그사이 다른 화면으로 갔으면 그리지 않는다
   const cfg = DOCS[key];
   const writer = isWriter();
   const list = col(cfg.col).list().sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));

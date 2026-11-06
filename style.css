@@ -282,10 +282,24 @@ label.check.pick .val { display: block; white-space: pre-line; background: var(-
 .login-btn { padding: 7px 16px; }
 .chip.user { text-decoration: none; color: var(--text-2); font-weight: 600; }
 .chip.user.on { background: var(--accent-soft); color: var(--accent-2); }
-.nav { overflow-x: auto; scrollbar-width: none; }
+.nav { overflow: hidden; min-width: 0; flex: 0 1 auto; }
+.top-actions { margin-left: auto; }
+.nav-more { position: relative; flex: none; }
+.nav-more > summary { list-style: none; cursor: pointer; padding: 6px 12px; border-radius: 999px; font-weight: 600; color: var(--text-2); white-space: nowrap; font-size: 14px; }
+.nav-more > summary::-webkit-details-marker { display: none; }
+.nav-more > summary::after { content: ' ▾'; font-size: 11px; }
+.nav-more > summary.on, .nav-more[open] > summary { background: var(--accent-soft); color: var(--accent-2); }
+.nav-more-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 170px; display: flex; flex-direction: column; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.nav-more-menu a { text-decoration: none; color: var(--text-2); padding: 8px 12px; border-radius: 8px; font-weight: 600; display: flex; gap: 6px; white-space: nowrap; }
+.nav-more-menu a:hover { background: var(--surface-2); }
+.nav-more-menu a.on { background: var(--accent-soft); color: var(--accent-2); }
+.nav-more-menu .ic { display: inline !important; }
 .nav a { display: inline-flex; align-items: center; gap: 4px; }
 .nav .ic, .tabbar .ic { font-size: 15px; }
 @media (max-width: 1500px) { .nav a { padding: 6px 9px; font-size: 14px; } .nav .ic { display: none; } }
+@media (max-width: 1100px) { .brand span { display: none; } .topbar { gap: 10px; } }
+@media (max-width: 700px) { .brand span { display: inline; } .nav-more { display: none; } }
 .hero { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 22px 20px; margin-bottom: 14px; border-radius: 16px;
   background: linear-gradient(135deg, #fde7cf, #fff7ec); border: 1px solid var(--line); }
 .hero img { height: 64px; }
@@ -382,7 +396,14 @@ img.missing { visibility: hidden; }
 .gift-stock tr.low td { background: #fff8ec; }
 .gift-stock td.stock b { font-size: 18px; }
 .low-warn { margin: 0 0 12px; }
-.gift-stock td.act { white-space: normal; }
+.gift-stock td.act { white-space: nowrap; width: 1%; }
+.act-main { display: flex; align-items: center; gap: 6px; position: relative; }
+details.row-more > summary { list-style: none; min-width: 34px; }
+details.row-more > summary::-webkit-details-marker { display: none; }
+.row-more-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 15; display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .12); min-width: 140px; }
+.row-more-menu .btn { justify-content: flex-start; }
+.table-wrap.gift-wrap { overflow: visible; }
 
 /* 대화상자 입력 */
 .form-modal select, .form-modal textarea, .form-modal input[type=text], .form-modal input[type=tel], .form-modal input[type=date], .form-modal input[type=number] { width: 100%; font-size: 16px; }
@@ -409,7 +430,11 @@ table.grid.people td.act, table.grid.roster td.act { white-space: nowrap; }
   .album-grid { grid-template-columns: repeat(2, 1fr); }
   .photo-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
   .file-chip .fname { max-width: 150px; }
-  .gift-stock td.act .ghost { padding: 4px 8px; }
+  .gift-stock td.act { width: 100% !important; }
+  .act-main .btn.small { min-height: 38px; padding: 6px 14px; font-size: 14px; }
+  .act-main { flex-wrap: wrap; }
+  details.row-more[open] { flex-basis: 100%; }
+  .row-more-menu { position: static; flex-direction: row; flex-wrap: wrap; box-shadow: none; border: 0; padding: 8px 0 0; min-width: 0; background: none; }
   /* 사람 명단(access-ui): 휴대폰에서는 한 사람 = 카드 하나 */
   #ppl { padding: 10px; }
   #ppl .ax-card { padding: 14px; }
