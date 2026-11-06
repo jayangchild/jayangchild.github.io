@@ -76,4 +76,5 @@ GitHub에 `jayangchild` 계정으로 로그인 → 오른쪽 위 **+ → New rep
 - 선물 모듈 자리: `js/schemas.js` 아래 설명 (`giftLog` 에 더하기만, 재고 = 기준 + 합계).
 - 시험
   - `node tools/serve.mjs` → http://127.0.0.1:8765/core-test.html?report (core 20개)
+  - `node tools/e2e-roles.mjs` — 역할별 모듈: access-test·core-test, 역할마다 메뉴·데이터, 연락처·임원 자료 가리기, 공개 저장소에 평문 없음, EXIF, 재고·달란트 계산, 막기 (`SEED=…json` 이면 가져오기 개수도). 사진은 `tools/_tmp-e2e-roles/`.
   - `npm i --no-save playwright-core` 후 `node tools/e2e.mjs` — 가짜 GitHub(core 의 `fake-backend.js`)로 두 기기를 헤드리스 Edge에서: 처음 설정 → 예전 데이터 옮기기 → CSV·PPTX → 그림 → QR 연결 → 오프라인 동시 수정 → 같아짐·충돌·휴지통 → 인쇄 미리보기(`pilsa/monthly.html` 과 비교). 화면 사진은 `tools/_tmp-e2e/`.

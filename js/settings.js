@@ -9,6 +9,10 @@ import { THEMES } from './pilsa/themes.js';
 import { recoveryCodeBox, expField, expValue, saveTokenExp, TOKEN_HELP } from './gate.js';
 
 const ALL_COLS = [...new Set([...COLS, ...COLLECTIONS])];
+const COL_NAME = {
+  members: '명단', talentLog: '달란트 기록', plan: '연간계획', bulletins: '주보', albums: '앨범', videos: '영상', pages: '공개 페이지',
+  gifts: '선물 물품', giftTypes: '선물 종류', giftStock: '선물 기준 수량', giftLog: '선물 기록', policies: '정책', meetings: '임원회의 자료', accounting: '회계', people: '사람',
+};
 const ymd = (d = new Date()) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const when = (iso) => {
   if (!iso) return '';
@@ -124,8 +128,8 @@ function label(col, r) {
   if (col === 'themes') { const m = +String(r.id).slice(1); return `${THEMES[m]?.name || r.id} 디자인`; }
   if (col === 'files') return `그림 '${r.name || '이름 없음'}'${r.lastUse?.month ? ` (${r.lastUse.month}월 디자인에 있던 것)` : ''}`;
   if (col === 'sys') return r.id === 'firstSunday' ? '학기 첫 주일 설정' : `설정 (${r.id})`;
-  const name = r.name || r.title || r.gift || r.member || '';
-  return `${col} · ${name || r.id}`;
+  const name = r.name || r.title || (col === 'talentLog' ? `${r.date || ''} ${r.qty > 0 ? '+' : ''}${r.qty ?? ''} ${r.why || ''}` : '') || (col === 'giftLog' ? `${r.date || ''} ${r.qty ?? ''}` : '') || '';
+  return `${COL_NAME[col] || col} · ${name || r.id}`;
 }
 
 function showValue(v) {

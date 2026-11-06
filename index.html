@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
-  <!-- 이 페이지는 GitHub API(비공개 데이터 저장소 jayangchild-data, 암호화된 내용만) 말고는 어디에도 연결하지 않는다. 글꼴·스크립트·그림은 모두 이 사이트 안에 있다 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <!-- 이 페이지는 GitHub API(데이터 저장소·공개 저장소에 올리기, 암호화된 내용만)와 raw.githubusercontent.com(파일 저장소 jayangchild-files-N 의 암호문 읽기) 말고는 어디에도 연결하지 않는다. 글꼴·스크립트·그림은 모두 이 사이트 안에 있다 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#d9792b">
   <title>자양교회 유년부</title>
@@ -15,21 +15,24 @@
 </head>
 <body>
   <!-- 여는 화면: 처음 설정 · 비밀번호 · QR로 연결 · 복구 코드 · 이름 (js/gate.js) -->
-  <div id="gate" class="gate"><div id="gate-card" class="gate-card"><div class="gate-logo"><img src="assets/logo.png" alt=""><span>자양교회 유년부</span></div><p class="muted">여는 중…</p></div></div>
+  <div id="gate" class="gate" hidden><div id="gate-card" class="gate-card"></div></div>
 
-  <div id="app" hidden>
+  <!-- 첫 화면은 늘 공개 화면. 로그인(아이디 + 접속 코드)하면 그 역할의 메뉴가 열린다 -->
+  <div id="app">
     <header class="topbar">
-      <a class="brand" href="#/pilsa/make"><img src="assets/logo.png" alt=""><span>자양교회 유년부</span></a>
+      <a class="brand" href="#/home"><img src="assets/logo.png" alt=""><span>자양교회 유년부</span></a>
       <nav id="nav" class="nav" aria-label="메뉴"></nav>
       <div class="top-actions">
         <a id="conflict-badge" class="badge-warn" href="#/conflicts" hidden>⚠ 확인 <span>0</span></a>
-        <button id="sync-chip" class="chip ok" type="button" title="저장 상태">✓ 저장됨</button>
-        <button id="lock-btn" class="btn ghost small icon ph-hide" type="button" title="잠그기 (데이터·비밀번호·복구 코드는 그대로)" aria-label="잠그기">🔒</button>
-        <a id="settings-btn" class="btn ghost small icon" href="#/settings" title="설정" aria-label="설정">⚙<span class="ph-hide"> 설정</span></a>
+        <button id="sync-chip" class="chip ok" type="button" title="저장 상태" hidden>✓ 저장됨</button>
+        <button id="lock-btn" class="btn ghost small icon ph-hide" hidden type="button" title="잠그기 (데이터·비밀번호·복구 코드는 그대로)" aria-label="잠그기">🔒</button>
+        <a id="settings-btn" class="btn ghost small icon" href="#/settings" title="설정" aria-label="설정" hidden>⚙<span class="ph-hide"> 설정</span></a>
+        <a id="user-chip" class="chip user" href="#/me" title="내 정보 · 로그아웃" hidden></a>
+        <a id="login-btn" class="btn primary login-btn" href="#/login">로그인</a>
       </div>
     </header>
     <div id="banner" class="banners"></div>
-    <main id="view" class="view"></main>
+    <main id="view" class="view"><p class="muted">여는 중…</p></main>
     <!-- 휴대폰(폭 700px 미만)에서만 보이는 아래 메뉴 -->
     <nav id="tabbar" class="tabbar" aria-label="메뉴"></nav>
   </div>

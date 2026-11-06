@@ -9,10 +9,14 @@ import { esc } from './pilsa/sheet.js';
 const MIN_PW = 8;
 const card = () => $('#gate-card');
 
-function show(html) {
+// back: 아래에 '← 공개 화면' (복구 코드를 보여 주는 화면은 빼고)
+function show(html, { back = true } = {}) {
   $('#app').hidden = true;
   $('#gate').hidden = false;
-  card().innerHTML = `<div class="gate-logo"><img src="assets/logo.png" alt=""><span>자양교회 유년부</span></div>${html}`;
+  card().innerHTML = `<div class="gate-logo"><img src="assets/logo.png" alt=""><span>자양교회 유년부</span></div>${html}`
+    + (back ? '<div class="gate-links"><button class="btn ghost small" type="button" data-g="public">← 공개 화면으로</button></div>' : '');
+  const b = card().querySelector('[data-g=public]');
+  if (b) b.onclick = () => cancel();
   card().querySelector('input:not([type=hidden]):not(.sr-only):not([type=checkbox])')?.focus();
   window.scrollTo(0, 0);
 }
@@ -146,20 +150,29 @@ async function opened() {
   hide();
   const f = finish;
   finish = null;
-  f?.();
+  f?.(true);
+}
+
+// 관리자 화면을 그만두고 공개 화면으로 (데이터는 열지 않은 채)
+function cancel() {
+  hide();
+  const f = finish;
+  finish = null;
+  f?.(false);
 }
 
 async function welcomeScreen(err = '') {
   const legacy = await legacyInfo();
   show(`
-    <h1>이 기기 연결</h1>
-    <p class="muted">이 기기는 아직 연결되지 않았어요. 필사노트 같은 데이터는 비공개 GitHub 저장소에 <b>암호화되어</b> 있고, 연결하면 그대로 보여요.</p>
+    <h1>관리자 기기 연결</h1>
+    <p class="muted">이 화면은 <b>관리자</b>가 기기를 데이터 저장소에 연결할 때 써요. 학부모·선생님·임원은 공개 화면의 <b>로그인</b>(아이디 + 접속 코드)으로 들어오세요.
+      데이터는 비공개 GitHub 저장소에 <b>암호화되어</b> 있고, 연결하면 그대로 보여요.</p>
     ${err ? `<p class="err" role="alert">${esc(err)}</p>` : ''}
     ${legacy ? `<div class="info-box">이 기기(브라우저)에 예전에 저장한 필사노트가 있어요 (${legacy.items}개${legacy.files ? `, 그림 ${legacy.files}개` : ''}). 연결해서 열면 자동으로 옮겨요. 옮기기 전에는 지우지 않아요.</div>` : ''}
     <div class="info-box">
-      <b>선생님이라면 — QR로 연결해요</b>
+      <b>관리자의 다른 기기라면 — QR로 연결해요</b>
       <ol class="steps-list">
-        <li>이미 쓰고 있는 선생님(또는 관리자)께 <b>설정 → 새 기기 연결(QR)</b> 을 열어 달라고 하세요.</li>
+        <li>이미 연결된 관리자 기기에서 <b>설정 → 새 기기 연결(QR)</b> 을 여세요.</li>
         <li>이 휴대폰의 <b>카메라</b>로 그 QR을 찍고, 뜨는 링크를 누르세요.</li>
         <li>열린 화면에서 <b>사이트 비밀번호</b>와 이름을 넣으면 끝이에요.</li>
       </ol>
@@ -237,7 +250,7 @@ function setupScreen() {
 }
 
 function codeScreen(code) {
-  show(`<h1>복구 코드 — 꼭 보관하세요</h1><div id="rc-box"></div>`);
+  show(`<h1>복구 코드 — 꼭 보관하세요</h1><div id="rc-box"></div>`, { back: false });
   recoveryCodeBox($('#rc-box'), code, () => opened(), { doneLabel: '보관했어요. 시작하기' });
 }
 
@@ -381,6 +394,7 @@ function nameScreen() {
 }
 
 // 데이터가 열리고 이름이 정해질 때까지 여는 화면을 보여 준다. msg = 잠금 화면에 보일 말 (예: 다른 기기에서 비밀번호가 바뀜)
+// → true(열림) | false('← 공개 화면으로'를 누름)
 export async function ensureOpen(msg = '') {
   await core.ready;
   let joinErr = '';

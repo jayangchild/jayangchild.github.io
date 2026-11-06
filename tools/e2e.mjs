@@ -30,6 +30,7 @@ await mkdir(OUT, { recursive: true });
 
 const results = [];
 const problems = []; // 콘솔 오류 · CSP 위반
+const notFound = []; // access 의 '아직 없음' 404 (오류 아님)
 const shots = [];
 function note(name, cond, detail = '') {
   results.push({ name, ok: true, soft: !cond, detail });
@@ -87,7 +88,12 @@ async function device(name, repo, { phone = false } = {}) {
   });
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
   const page = await ctx.newPage();
-  page.on('console', (m) => { if (m.type() === 'error') problems.push(`[${name}] console: ${m.text()}`); });
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    // access 는 아직 없는 목록(keyring.json · access/<등급>/index.json)을 404 로 확인한다 — 오류가 아니다
+    if (/status of 404/.test(m.text()) && /\/(keyring\.json|access\/)/.test(m.location()?.url || '')) { notFound.push(m.location().url); return; }
+    problems.push(`[${name}] console: ${m.text()}`);
+  });
   page.on('pageerror', (e) => problems.push(`[${name}] pageerror: ${e.message}`));
   page.on('dialog', (d) => d.accept());
   page.name = name;
@@ -129,6 +135,22 @@ async function pixelDiff(a, b) {
   await pg.close();
   return r;
 }
+// async 조건을 Node 에서 기다린다 (waitForFunction 은 Promise 를 참으로 본다)
+async function until(page, fn, arg, ms = 30000) {
+  const t0 = Date.now();
+  while (!(await page.evaluate(fn, arg).catch(() => false))) {
+    if (Date.now() - t0 > ms) throw new Error('기다리다 시간이 다 됐어요');
+    await sleep(150);
+  }
+}
+// 첫 화면은 공개 화면 → 로그인 → 작은 «관리자» → 여는 화면(gate)
+async function toAdminGate(page) {
+  await page.waitForSelector('#login-btn:not([hidden])');
+  await page.click('#login-btn');
+  await page.waitForSelector('.admin-link');
+  await page.click('.admin-link');
+  await page.waitForSelector('#gate-card h1');
+}
 async function choose(page, click, files) {
   const [fc] = await Promise.all([page.waitForEvent('filechooser'), click()]);
   await fc.setFiles(files);
@@ -154,7 +176,9 @@ try {
     const repo2 = new FakeRepo(['tok-phone']);
     const p = await device('phone-setup', repo2, { phone: true });
     await p.goto(`${BASE}/`);
-    await p.waitForSelector('#gate-card h1');
+    await p.waitForSelector('.hero');
+    ok('첫 화면은 공개 화면 (여는 화면 아님)', await p.isHidden('#gate') && await p.isVisible('#login-btn'));
+    await toAdminGate(p);
     await shot(p, 'phone-1-welcome.png', { fullPage: true });
     await p.click('details.admin summary');
     await p.click('[data-g=setup]');
@@ -174,6 +198,8 @@ try {
     await shot(p, 'phone-4-app.png');
     await p.click('#settings-btn');
     await p.click('[data-s=lock]');
+    await p.waitForSelector('.hero');
+    await toAdminGate(p);
     await p.waitForSelector('#f-unlock');
     ok('휴대폰: 이 기기 기억하기 기본 꺼짐', !(await p.isChecked('#f-unlock [name=remember]')));
     await shot(p, 'phone-5-unlock.png', { fullPage: true });
@@ -210,7 +236,7 @@ try {
   }, png);
 
   await A.goto(`${BASE}/`);
-  await A.waitForSelector('#gate-card h1');
+  await toAdminGate(A);
   ok('연결 화면: 예전 데이터 안내', (await A.textContent('#gate-card')).includes('예전에 저장한 필사노트'));
   await shot(A, 'pc-1-welcome.png');
   await A.click('details.admin summary');
@@ -239,7 +265,7 @@ try {
   ok('vault.json 이 저장소에 생김', repo.files.has('vault.json'));
 
   // 예전 데이터가 옮겨졌는가 → 예전 사본은 지워졌는가
-  await A.waitForFunction(async () => (await import('/js/store.js')).S.data.items.lessons.some((v) => v.id === 'legacy1'));
+  await until(A, async () => !!(await import('/js/store.js')).S.data?.items.lessons.some((v) => v.id === 'legacy1'));
   const mig = await A.evaluate(async () => {
     const m = await import('/js/store.js');
     const blob = await m.getFile('legacyimg1');
@@ -374,7 +400,7 @@ try {
   await B.fill('#f-join [name=pw]', PW);
   await B.click('#f-join button[type=submit]');
   await ready(B);
-  await B.waitForFunction(async () => (await import('/js/store.js')).S.data.items.lessons.length === 12, null, { timeout: 30000 });
+  await B.waitForFunction(async () => (await import('/js/store.js')).S.data?.items.lessons.length === 12, null, { timeout: 30000 });
   await syncNow(B);
   const diff = (x, y) => { const i = x.findIndex((v, k) => JSON.stringify(v) !== JSON.stringify(y[k])); return i < 0 ? '' : `${JSON.stringify(x[i])} ≠ ${JSON.stringify(y[i])}`; };
   {
@@ -446,7 +472,7 @@ try {
   await B.waitForFunction(async () => (await import('/js/store.js')).trash('lessons').length === 0);
   await syncNow(B);
   await syncNow(A);
-  await A.waitForFunction(async () => (await import('/js/store.js')).S.data.items.lessons.length === 12);
+  await A.waitForFunction(async () => (await import('/js/store.js')).S.data?.items.lessons.length === 12);
   ok('되살린 52과가 A 에도', (await lessonsOf(A)).some((v) => v.no === 52));
 
   // ---------- 10. B 의 인쇄 미리보기: A 가 올린 그림이 보이는가 ----------
@@ -458,6 +484,8 @@ try {
   // ---------- 11. 잠그기 → 비밀번호로 열기 ----------
   await nav(A, `#/pilsa/make`);
   await A.click('#lock-btn');
+  await A.waitForSelector('.hero');
+  await toAdminGate(A);
   await A.waitForSelector('#f-unlock');
   ok('PC: 이 기기 기억하기 기본 꺼짐', !(await A.isChecked('#f-unlock [name=remember]')));
   await shot(A, 'pc-7-unlock.png');

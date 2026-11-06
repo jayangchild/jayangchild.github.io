@@ -7,6 +7,10 @@ const FILES = [
   'js/core/kv.js', 'js/core/image.js', 'js/core/qrcode.js',
   'js/pilsa/extract.js', 'js/pilsa/art.js', 'js/pilsa/themes.js', 'js/pilsa/sheet.js',
   'js/pilsa/make.js', 'js/pilsa/design.js', 'js/pilsa/print.js', 'js/pilsa/preview.js',
+  'js/core/access.js', 'js/core/access-ui.js',
+  'js/modules/site-access.js', 'js/modules/access-env.js', 'js/modules/ctx.js', 'js/modules/menus.js', 'js/modules/kit.js',
+  'js/modules/home.js', 'js/modules/roster.js', 'js/modules/talent.js', 'js/modules/plan.js', 'js/modules/docs.js',
+  'js/modules/files-view.js', 'js/modules/media.js', 'js/modules/gifts.js', 'js/modules/admin.js', 'js/modules/trash.js',
 ];
 const CSS = ['style.css', 'css/sheet.css'];
 
